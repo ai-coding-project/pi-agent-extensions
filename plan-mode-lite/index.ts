@@ -53,25 +53,8 @@ function restorePersistedState(entries: unknown[]): ExtensionState | undefined {
 	return undefined;
 }
 
-function planContract(shortcut: string): string {
-	return `## Plan Mode (ACTIVE — read-only)
-
-You are in plan mode. Explore and plan; do not modify anything.
-
-- File-modifying tools (edit, write) are disabled. Bash and PowerShell are
-  restricted to a read-only inspection allowlist: mutating commands (writes,
-  redirects, package installs, git commit/push, ...) are blocked.
-- Research the code with read-only tools until you can produce a complete,
-  directly implementable plan.
-- If a decision that materially affects the plan cannot be answered from the
-  code, call plan_mode_question (1-3 questions, each with 2-4 options,
-  recommended option first) instead of guessing user preferences.
-- Present the final plan as markdown in your reply: goal, approach, exact
-  files and symbols to change, step-by-step implementation, risks, and
-  verification steps.
-- Do not attempt to implement the plan. When it is ready, remind the user to
-  toggle plan mode off (${shortcut} or /plan off) to start implementation.
-  `;
+function planContract(): string {
+	return `Plan mode is ACTIVE (read-only): do not modify anything — edit/write are disabled and bash/PowerShell allow only read-only inspection. Research the code, use plan_mode_question for material decisions, and present a complete, implementable plan in your reply. The user will exit plan mode to start implementation.`;
 }
 
 export default function planModeExtension(pi: ExtensionAPI) {
@@ -113,6 +96,17 @@ export default function planModeExtension(pi: ExtensionAPI) {
 					: "Plan mode OFF — file editing enabled.",
 				"info",
 			);
+			// Model-visible state notice (one per toggle): this is the only signal
+			// the model gets that the mode changed — the plan contract never enters
+			// the conversation history.
+			pi.sendMessage({
+				customType: "plan-mode-state",
+				content: state.enabled
+					? "Plan mode is now ON — read-only. Research and plan; do not modify files until the user exits plan mode."
+					: "Plan mode is now OFF — editing tools are re-enabled. Implement directly when asked; do not ask the user to toggle plan mode again.",
+				display: false,
+				details: { enabled: state.enabled },
+			});
 		}
 	};
 
@@ -258,6 +252,9 @@ export default function planModeExtension(pi: ExtensionAPI) {
 
 	pi.on("before_agent_start", (event) => {
 		if (!state.enabled) return;
-		return { systemPrompt: `${event.systemPrompt}\n\n${planContract(shortcutLabel())}` };
+		// Named section (docs-recommended) instead of a forced prompt: pi records
+		// the section add/removal as transcript deltas, so the mode transition is
+		// persisted and replayed on resume.
+		event.systemPromptOptions.sections["plan-mode"] = planContract();
 	});
 }

@@ -9,7 +9,8 @@
 - **只读防护**（移植自 [@narumitw/pi-plan-mode-lite](https://github.com/narumiruna/pi-extensions) 的 tool-policy，MIT）：
   - `edit` / `write` 工具被停用并双重拦截
   - bash / PowerShell 走**白名单 + fail-closed** 策略：无法安全解析的命令（重定向、反引号、子 shell、未闭合引号、变量展开）一律拒绝；白名单命令的危险参数（`sed -i`、`find -delete`、`sort -o` 等）单独拦截；git/gh 逐子命令、逐参数校验
-- **Plan contract 注入**：计划模式期间向系统提示追加契约——要求模型只读调研、产出完整可实施计划、不得动手实现
+- **Plan contract 注入**：计划模式期间以命名 section（`plan-mode`）注入系统提示——要求模型只读调研、产出完整可实施计划、不得动手实现；开关状态以增量记入会话记录，resume 后自动还原
+- **状态变化通知**：用户主动切换时通过 `pi.sendMessage` 发送一条**仅模型可见**的通知（"Plan mode is now ON/OFF …"），模型能明确感知模式已切换，不会在用户关闭后仍反复要求其退出计划模式
 - **`plan_mode_question` 工具**：模型遇到无法从代码得到答案、又会实质影响方案的取舍时，通过结构化选择器向你提问（1-3 个问题，每个 2-4 个选项，也可自定义作答）
 - **状态持久化**：切换状态写入会话条目，resume / fork 后自动恢复
 - **页脚状态**：计划模式开启时页脚显示 `⏸ plan`

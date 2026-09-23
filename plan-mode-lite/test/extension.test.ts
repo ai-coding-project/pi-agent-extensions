@@ -25,6 +25,13 @@ type MockCtx = {
 
 type Handler = (event: any, ctx: MockCtx) => any;
 
+type SentMessage = {
+	customType: string;
+	content: string;
+	display: boolean;
+	details?: unknown;
+};
+
 interface MockPi {
 	tools: Array<{ name: string }>;
 	commands: Record<string, { handler: (args: string, ctx: MockCtx) => Promise<void> | void }>;
@@ -32,6 +39,7 @@ interface MockPi {
 	flags: Array<[string, unknown]>;
 	events: Record<string, Handler[]>;
 	entries: Array<[string, unknown]>;
+	messages: SentMessage[];
 	activeTools: string[] | undefined;
 	_allTools: string[];
 	registerTool: (tool: { name: string }) => void;
@@ -42,6 +50,7 @@ interface MockPi {
 	getActiveTools: () => string[];
 	setActiveTools: (names: string[]) => void;
 	appendEntry: (type: string, data: unknown) => void;
+	sendMessage: (message: SentMessage) => void;
 	on: (event: string, handler: Handler) => void;
 }
 
@@ -53,6 +62,7 @@ function makeMockPi(): MockPi {
 		flags: [],
 		events: {},
 		entries: [],
+		messages: [],
 		activeTools: undefined,
 		_allTools: ["read", "bash", "edit", "write", "plan_mode_question"],
 		registerTool: (tool) => {
@@ -74,6 +84,9 @@ function makeMockPi(): MockPi {
 		},
 		appendEntry: (type, data) => {
 			mock.entries.push([type, data]);
+		},
+		sendMessage: (message) => {
+			mock.messages.push(message);
 		},
 		on: (event, handler) => {
 			(mock.events[event] ??= []).push(handler);
@@ -150,12 +163,44 @@ test("tool_call blocks edit/write and unsafe bash while plan mode is on", () => 
 	assert.equal(handler({ toolName: "read", input: { path: "x" } }, makeMockCtx()), undefined);
 });
 
-test("before_agent_start injects the plan contract while enabled", () => {
+test("before_agent_start injects the plan contract as a named section while enabled", () => {
 	const pi = load();
 	firstHandler(pi, "session_start")({ reason: "startup" }, makeMockCtx());
-	const result = firstHandler(pi, "before_agent_start")({ systemPrompt: "BASE" }, makeMockCtx());
-	assert.ok(result.systemPrompt.startsWith("BASE"));
-	assert.ok(result.systemPrompt.includes("Plan Mode (ACTIVE"));
+	const event: any = { prompt: "hi", systemPrompt: "BASE", systemPromptOptions: { sections: {} } };
+	const result = firstHandler(pi, "before_agent_start")(event, makeMockCtx());
+	assert.equal(result, undefined, "handler mutates sections instead of returning a forced prompt");
+	assert.ok(event.systemPromptOptions.sections["plan-mode"].includes("Plan mode is ACTIVE"));
+});
+
+test("before_agent_start leaves sections untouched while disabled", async () => {
+	const pi = load();
+	const ctx = makeMockCtx();
+	firstHandler(pi, "session_start")({ reason: "startup" }, ctx);
+	await pi.commands.plan!.handler("off", ctx);
+	const event: any = { prompt: "hi", systemPrompt: "BASE", systemPromptOptions: { sections: {} } };
+	const result = firstHandler(pi, "before_agent_start")(event, makeMockCtx());
+	assert.equal(result, undefined);
+	assert.equal(event.systemPromptOptions.sections["plan-mode"], undefined);
+});
+
+test("user-initiated toggles send a model-visible state notice", async () => {
+	const pi = load();
+	const ctx = makeMockCtx();
+	firstHandler(pi, "session_start")({ reason: "startup" }, ctx);
+	assert.equal(pi.messages.length, 0, "session_start restoration sends no notice");
+
+	await pi.commands.plan!.handler("off", ctx);
+	assert.equal(pi.messages.length, 1);
+	assert.equal(pi.messages[0]!.customType, "plan-mode-state");
+	assert.equal(pi.messages[0]!.display, false);
+	assert.deepEqual(pi.messages[0]!.details, { enabled: false });
+	assert.ok(pi.messages[0]!.content.includes("Plan mode is now OFF"));
+	assert.ok(pi.messages[0]!.content.includes("do not ask the user to toggle plan mode again"));
+
+	await pi.commands.plan!.handler("on", ctx);
+	assert.equal(pi.messages.length, 2);
+	assert.ok(pi.messages[1]!.content.includes("Plan mode is now ON"));
+	assert.deepEqual(pi.messages[1]!.details, { enabled: true });
 });
 
 test("/plan off restores tools and /plan status works", async () => {
