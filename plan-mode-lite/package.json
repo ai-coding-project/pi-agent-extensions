@@ -1,0 +1,37 @@
+{
+	"name": "plan-mode-lite",
+	"version": "0.1.1",
+	"description": "Lightweight plan mode extension for pi — read-only exploration by default, toggle with ctrl+tab or /plan",
+	"license": "MIT",
+	"type": "module",
+	"keywords": ["pi-package", "pi", "plan-mode-lite", "coding-agent"],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ai-coding-project/pi-agent-extensions.git",
+		"directory": "plan-mode-lite"
+	},
+	"pi": {
+		"extensions": ["./index.ts"]
+	},
+	"files": ["index.ts", "src", "test"],
+	"scripts": {
+		"test": "node --test test/",
+		"typecheck": "tsc --noEmit"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*"
+	},
+	"peerDependenciesMeta": {
+		"@earendil-works/pi-coding-agent": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@earendil-works/pi-coding-agent": "^0.87.1",
+		"@types/node": "^24",
+		"typescript": "^5.9.3"
+	},
+	"engines": {
+		"node": ">=22.18"
+	}
+}

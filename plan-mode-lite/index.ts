@@ -1,7 +1,7 @@
 /**
  * Plan Mode extension for pi.
  *
- * - Start in plan mode by default (configurable via ~/.pi/agent/plan-mode.json)
+ * - Start in plan mode by default (configurable via ~/.pi/agent/plan-mode-lite.json)
  * - Toggle with the configured shortcut (default ctrl+tab) or /plan
  * - While active: edit/write tools are deactivated, bash/powershell are
  *   restricted to a read-only allowlist, and a read-only "Plan contract" is
@@ -176,7 +176,7 @@ export default function planModeExtension(pi: ExtensionAPI) {
 					ctx.ui.notify(
 						`Plan mode: ${state.enabled ? "ON (read-only)" : "OFF"} · default: ${
 							config.defaultOn ? "on" : "off"
-						} · toggle: ${shortcutLabel()} · config: ~/.pi/agent/plan-mode.json`,
+						} · toggle: ${shortcutLabel()} · config: ~/.pi/agent/plan-mode-lite.json`,
 						"info",
 					);
 					return;
@@ -185,9 +185,9 @@ export default function planModeExtension(pi: ExtensionAPI) {
 					const defaultOn = sub === "default-on";
 					if (saveDefaultOn(defaultOn)) {
 						config.defaultOn = defaultOn;
-						ctx.ui.notify(`Plan mode default set to ${defaultOn ? "on" : "off"} (saved to plan-mode.json).`, "info");
+						ctx.ui.notify(`Plan mode default set to ${defaultOn ? "on" : "off"} (saved to plan-mode-lite.json).`, "info");
 					} else {
-						ctx.ui.notify("Failed to write ~/.pi/agent/plan-mode.json.", "error");
+						ctx.ui.notify("Failed to write ~/.pi/agent/plan-mode-lite.json.", "error");
 					}
 					return;
 				}
@@ -198,14 +198,16 @@ export default function planModeExtension(pi: ExtensionAPI) {
 	});
 
 	if (config.toggleShortcut) {
-		pi.registerShortcut(config.toggleShortcut, {
+		// config.toggleShortcut is a user-provided string; cast to pi's KeyId union.
+		const shortcut = config.toggleShortcut as Parameters<ExtensionAPI["registerShortcut"]>[0];
+		pi.registerShortcut(shortcut, {
 			description: "Toggle Plan mode",
 			handler: (ctx) => togglePlanMode(ctx),
 		});
 	}
 
 	pi.registerFlag("plan", {
-		description: "Start in plan mode (overrides the defaultOn setting in plan-mode.json)",
+		description: "Start in plan mode (overrides the defaultOn setting in plan-mode-lite.json)",
 		type: "boolean",
 		default: false,
 	});

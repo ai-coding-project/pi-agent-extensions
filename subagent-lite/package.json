@@ -5,7 +5,7 @@
 	"description": "Minimal pi extension for delegating work to child agents (sync or async)",
 	"license": "MIT",
 	"type": "module",
-	"keywords": ["pi-package"],
+	"keywords": ["pi-package", "pi", "subagent-lite", "coding-agent"],
 	"pi": {
 		"extensions": [
 			"./index.ts"

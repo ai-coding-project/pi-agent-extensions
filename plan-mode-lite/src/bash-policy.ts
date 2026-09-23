@@ -189,7 +189,7 @@ function splitPowerShellSegments(command: string): string[] | undefined {
 	let quote: "'" | '"' | undefined;
 	let start = 0;
 	for (let index = 0; index < trimmed.length; index += 1) {
-		const character = trimmed[index];
+		const character = trimmed[index]!;
 		if (quote === "'") {
 			if (character !== "'") continue;
 			if (trimmed[index + 1] === "'") {
@@ -247,7 +247,7 @@ function powerShellWords(segment: string): string[] | undefined {
 	let hasWord = false;
 	let quote: "'" | '"' | undefined;
 	for (let index = 0; index < segment.length; index += 1) {
-		const character = segment[index];
+		const character = segment[index]!;
 		if (quote === "'") {
 			if (character !== "'") {
 				word += character;
@@ -760,7 +760,7 @@ function hasGhJsonOutput(args: string[]) {
 			if (!value || value.startsWith("-")) return false;
 			hasJson = true;
 			index += 1;
-		} else if (argument.startsWith("--json=")) {
+		} else if (argument?.startsWith("--json=")) {
 			if (argument === "--json=") return false;
 			hasJson = true;
 		}

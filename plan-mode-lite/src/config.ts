@@ -1,10 +1,13 @@
 /**
  * Configuration for the plan-mode extension.
  *
- * Loaded from ~/.pi/agent/plan-mode.json. If that file does not exist, the
- * legacy ~/.pi/agent/pi-plan-mode.json (from @narumitw/pi-plan-mode) is read
+ * Loaded from ~/.pi/agent/plan-mode-lite.json. If that file does not exist, the
+ * legacy ~/.pi/agent/pi-plan-mode-lite.json (from @narumitw/pi-plan-mode) is read
  * as a migration fallback so existing toggleShortcut / safeSubcommands keep
  * working.
+ *
+ * The configuration directory defaults to ~/.pi/agent and can be overridden
+ * with the PLAN_MODE_CONFIG_DIR environment variable (used by tests).
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -29,9 +32,9 @@ export const DEFAULT_CONFIG: PlanModeConfig = {
 
 export const PLAN_COMMANDS = ["on", "off", "status", "default-on", "default-off"] as const;
 
-const CONFIG_DIR = join(homedir(), ".pi", "agent");
-const CONFIG_PATH = join(CONFIG_DIR, "plan-mode.json");
-const LEGACY_CONFIG_PATH = join(CONFIG_DIR, "pi-plan-mode.json");
+function configDir(): string {
+	return process.env.PLAN_MODE_CONFIG_DIR ?? join(homedir(), ".pi", "agent");
+}
 
 function stringRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -48,12 +51,13 @@ function readConfigFile(path: string): Record<string, unknown> | undefined {
 }
 
 export function configPath(): string {
-	return CONFIG_PATH;
+	return join(configDir(), "plan-mode-lite.json");
 }
 
 export function loadConfig(): PlanModeConfig {
-	const own = readConfigFile(CONFIG_PATH);
-	const legacy = own ? undefined : readConfigFile(LEGACY_CONFIG_PATH);
+	const dir = configDir();
+	const own = readConfigFile(join(dir, "plan-mode-lite.json"));
+	const legacy = own ? undefined : readConfigFile(join(dir, "pi-plan-mode-lite.json"));
 	const raw = own ?? legacy ?? {};
 	const safeSubcommands: SafeSubcommands = {};
 	if (stringRecord(raw.safeSubcommands)) {
@@ -73,13 +77,14 @@ export function loadConfig(): PlanModeConfig {
 	};
 }
 
-/** Persist `defaultOn` to ~/.pi/agent/plan-mode.json (used by /plan default-on|off). */
+/** Persist `defaultOn` to the plan-mode-lite.json config file (used by /plan default-on|off). */
 export function saveDefaultOn(defaultOn: boolean): boolean {
 	try {
-		const raw = readConfigFile(CONFIG_PATH) ?? {};
+		const path = configPath();
+		const raw = readConfigFile(path) ?? {};
 		const next = { ...raw, defaultOn };
-		mkdirSync(CONFIG_DIR, { recursive: true });
-		writeFileSync(CONFIG_PATH, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+		mkdirSync(configDir(), { recursive: true });
+		writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
 		return true;
 	} catch {
 		return false;

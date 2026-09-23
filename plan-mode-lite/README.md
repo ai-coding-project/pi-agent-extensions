@@ -17,8 +17,14 @@
 ## 安装
 
 ```bash
+pi install npm:plan-mode
+```
+
+开发调试可以用 symlink 直接指向本仓库目录：
+
+```bash
 mkdir -p ~/.pi/agent/extensions
-ln -sfn /path/to/plan-mode ~/.pi/agent/extensions/plan-mode
+ln -sfn /path/to/pi-agent-extensions/plan-mode ~/.pi/agent/extensions/plan-mode
 ```
 
 （pi 支持加载 `~/.pi/agent/extensions/` 下含 `index.ts` 的子目录，symlink 可跟随。）
@@ -36,7 +42,7 @@ ln -sfn /path/to/plan-mode ~/.pi/agent/extensions/plan-mode
 
 ## 配置
 
-`~/.pi/agent/plan-mode.json`：
+`~/.pi/agent/plan-mode-lite.json`：
 
 ```json
 {
@@ -53,7 +59,7 @@ ln -sfn /path/to/plan-mode ~/.pi/agent/extensions/plan-mode
 - `toggleShortcut`：切换快捷键（默认 `ctrl+tab`；注意不要设成 `tab`，会遮蔽输入框的 Tab 补全，`shift+tab` 则会遮蔽 thinking 级别循环——扩展快捷键优先于内置按键）
 - `safeSubcommands`：额外放行的子命令（自担风险）。`gh` 的键值格式为 `"pr view"` 这类双段路径，且必须带 `--json` 输出
 
-旧版 `~/.pi/agent/pi-plan-mode.json`（narumitw 包的配置）在新配置文件不存在时会作为迁移回退被读取。
+旧版 `~/.pi/agent/pi-plan-mode-lite.json`（narumitw 包的配置）在新配置文件不存在时会作为迁移回退被读取。
 
 ## 与 @narumitw/pi-plan-mode 的差异
 
@@ -62,13 +68,18 @@ ln -sfn /path/to/plan-mode ~/.pi/agent/extensions/plan-mode
 ## 测试
 
 ```bash
-node test/run-tests.mjs
+npm test        # node --test test/（bash 策略 / 提问参数 / 扩展接线）
+npm run typecheck
 ```
 
 ## 结构
 
 - `index.ts` — 扩展入口：状态、切换、`/plan` 命令、快捷键、提示注入、事件拦截
 - `src/bash-policy.ts` — 只读命令策略（移植自 narumitw，MIT）
-- `src/config.ts` — 配置加载与持久化
+- `src/config.ts` — 配置加载与持久化（`PLAN_MODE_CONFIG_DIR` 环境变量可覆盖配置目录，测试用）
 - `src/plan-question.ts` — `plan_mode_question` 工具
-- `test/run-tests.mjs` — 测试
+- `test/*.test.ts` — node:test 测试（需 Node ≥ 22.18，原生 type stripping）
+
+## License
+
+MIT
