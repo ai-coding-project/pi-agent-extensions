@@ -1,8 +1,6 @@
 # subagent-lite
 
-为 [pi](https://github.com/badlogic/pi-mono)（`@earendil-works/pi-coding-agent`）提供的精简版 subagent 扩展：把任务委托给子 agent 同步或后台执行，并在会话关闭时清理全部存活子会话。
-
-设计原则：从 [pi-subagents](https://github.com/nicobailon/pi-subagents) 拷贝核心运行逻辑（子会话工厂、运行循环状态机、frontmatter 解析、通知格式），只保留「创建子 agent 并跑完」这一件事，其余功能全部裁剪。
+把任务委托给子 agent 同步或后台执行，并在会话关闭时清理全部存活子会话。
 
 ## 功能
 
