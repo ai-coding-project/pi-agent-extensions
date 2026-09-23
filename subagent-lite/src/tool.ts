@@ -41,7 +41,7 @@ export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhig
  * instances — the same pattern the reference implementation uses for theme
  * initialization.
  */
-const CHILD_SESSION_IDS_KEY = Symbol.for("pi-subagent-lite:childSessionIds");
+const CHILD_SESSION_IDS_KEY = Symbol.for("subagent-lite:childSessionIds");
 const childSessionIds: Set<string> = ((globalThis as Record<symbol, Set<string>>)[CHILD_SESSION_IDS_KEY] ??= new Set<string>());
 
 /** Split a known `:thinking` suffix from a model reference. (Copied semantics from the reference model-info.ts.) */

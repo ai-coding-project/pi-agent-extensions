@@ -66,7 +66,7 @@ test("child ids are released after the run settles", async (t) => {
 	assert.notEqual(impersonation.text, "child agents cannot spawn sub-agents (single-level nesting)");
 });
 
-const SHARED_IDS_KEY = Symbol.for("pi-subagent-lite:childSessionIds");
+const SHARED_IDS_KEY = Symbol.for("subagent-lite:childSessionIds");
 
 test("the guard set is process-global: live child ids land in the shared slot", async (t) => {
 	const host = setup(t);

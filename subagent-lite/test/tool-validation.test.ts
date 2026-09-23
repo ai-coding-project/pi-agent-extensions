@@ -14,7 +14,7 @@ import * as path from "node:path";
 function setup(t: TestContext) {
 	const agentDir = createIsolatedAgentDir(t as unknown as Parameters<typeof createIsolatedAgentDir>[0]);
 	const host: FakeHost = createFakeHost();
-	const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-lite-validation-"));
+	const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-lite-validation-"));
 	writeAgentFile(agentDir, "agents/reviewer.md", "---\nname: reviewer\ndescription: Reviews code\n---\nYou review code.");
 	return { host, projectDir };
 }
@@ -68,8 +68,8 @@ test("nonexistent cwd is rejected", async (t) => {
 
 test("a relative cwd resolves against the session cwd, not the process cwd", async (t) => {
 	const { host } = setup(t);
-	const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-lite-session-"));
-	const processDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-lite-process-"));
+	const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-lite-session-"));
+	const processDir = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-lite-process-"));
 	fs.mkdirSync(path.join(sessionDir, "sub"));
 	fs.mkdirSync(path.join(processDir, "sub"));
 	t.after(() => {

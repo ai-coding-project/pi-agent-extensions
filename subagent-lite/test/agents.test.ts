@@ -9,7 +9,7 @@ import { createIsolatedAgentDir, writeAgentFile, writeProjectFile } from "./supp
 
 function setup(t: TestContext): { agentDir: string; projectDir: string } {
 	const agentDir = createIsolatedAgentDir(t as unknown as Parameters<typeof createIsolatedAgentDir>[0]);
-	const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagent-lite-project-"));
+	const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-lite-project-"));
 	return { agentDir, projectDir };
 }
 

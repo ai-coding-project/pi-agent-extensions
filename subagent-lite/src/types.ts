@@ -1,5 +1,5 @@
 /**
- * Shared types for pi-subagent-lite.
+ * Shared types for subagent-lite.
  */
 
 export type SystemPromptMode = "append" | "replace";

@@ -1,5 +1,5 @@
 /**
- * pi-subagent-lite — minimal child-agent delegation for pi.
+ * subagent-lite — minimal child-agent delegation for pi.
  *
  * Registers one tool (`subagent-lite`) that runs child agents synchronously or
  * in the background, and cleans up all live children when the session shuts
@@ -15,6 +15,6 @@ export default function (pi: ExtensionAPI): void {
 		registerSubagentTool(pi);
 	} catch (error) {
 		// A broken extension must not crash the host session; surface the problem.
-		console.error("[pi-subagent-lite] registration failed:", error instanceof Error ? error.message : error);
+		console.error("[subagent-lite] registration failed:", error instanceof Error ? error.message : error);
 	}
 }

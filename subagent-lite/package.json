@@ -1,7 +1,7 @@
 {
-	"name": "pi-subagent-lite",
+	"name": "subagent-lite",
 	"version": "0.1.0",
-	"private": true,
+	"private": false,
 	"description": "Minimal pi extension for delegating work to child agents (sync or async)",
 	"license": "MIT",
 	"type": "module",
