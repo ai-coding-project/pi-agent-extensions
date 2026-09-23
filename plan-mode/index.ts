@@ -70,7 +70,8 @@ You are in plan mode. Explore and plan; do not modify anything.
   files and symbols to change, step-by-step implementation, risks, and
   verification steps.
 - Do not attempt to implement the plan. When it is ready, remind the user to
-  toggle plan mode off (${shortcut} or /plan off) to start implementation.`;
+  toggle plan mode off (${shortcut} or /plan off) to start implementation.
+  `;
 }
 
 export default function planModeExtension(pi: ExtensionAPI) {
