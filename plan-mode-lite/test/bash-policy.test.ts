@@ -164,6 +164,76 @@ test("configured safeSubcommands extend the allowlist", () => {
 	assert.ok(!safe("kubectl getter", config));
 });
 
+test("configured safeSubcommands trust only the matching segment (no chaining bypass)", () => {
+	const config: SafeSubcommands = { git: ["status"], kubectl: ["get"] };
+	for (const cmd of [
+		"git status; rm -rf /tmp/pwned",
+		"git status > /tmp/pwned",
+		"git status | sh",
+		"git status && rm x",
+		"kubectl get pods; rm x",
+		"kubectl get pods && touch /tmp/pwned",
+	]) {
+		assert.ok(!safe(cmd, config), `should be blocked: ${cmd}`);
+	}
+	for (const cmd of ["git status", "git status | head", "kubectl get pods"]) {
+		assert.ok(safe(cmd, config), `should be safe: ${cmd}`);
+	}
+	assert.ok(!psSafe("kubectl get pods; Remove-Item x", config));
+	assert.ok(psSafe("kubectl get pods", config));
+});
+
+test("clustered short options cannot smuggle dangerous flags", () => {
+	for (const cmd of [
+		"sort -fo /tmp/evil in.txt", // -f -o /tmp/evil: writes output
+		"sort -ro /tmp/evil in.txt",
+		"sort -oout /tmp/evil",
+		"sort -rT /tmp in.txt", // -r -T /tmp
+		"tree -Co /tmp/evil", // -C -o /tmp/evil
+		"date -su 20200101", // -u -s
+		"date -s20200101", // attached value form
+		"date -Rs 20200101",
+		"fd -Hx rm", // -H -x rm: executes rm per result
+		"fd -HX rm",
+	]) {
+		assert.ok(!safe(cmd), `should be blocked: ${cmd}`);
+	}
+	for (const cmd of [
+		"sort -r in.txt",
+		"sort -k2n in.txt",
+		"date -u",
+		"date -I",
+		"date -Iseconds", // -I takes the rest as value, not the -s flag
+		"date '+%s'",
+		"fd -t x", // separated value form stays allowed
+		"tree -C",
+	]) {
+		assert.ok(safe(cmd), `should be safe: ${cmd}`);
+	}
+});
+
+test("read-only -i flags and equals-sign arguments are safe (no false positives)", () => {
+	for (const cmd of [
+		"grep -i pattern file.txt",
+		"git grep -i pattern",
+		"diff -i a.txt b.txt",
+		"cat a=b.txt",
+		"grep foo=bar file.txt",
+		"find . -name 'x=y'",
+	]) {
+		assert.ok(safe(cmd), `should be safe: ${cmd}`);
+	}
+	for (const cmd of [
+		"sed -i 's/a/b/' f.txt",
+		"sed -ni '2p' f.txt",
+		"sed --in-place f.txt",
+		"FOO=1 ls",
+		"FOO=1 BAR=2 grep -i x f",
+	]) {
+		assert.ok(!safe(cmd), `should be blocked: ${cmd}`);
+	}
+});
+
 test("PowerShell read-only allowlist", () => {
 	for (const cmd of [
 		"Get-ChildItem -Recurse",

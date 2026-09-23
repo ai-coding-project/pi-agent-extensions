@@ -13,7 +13,7 @@
 - **状态变化通知**：用户主动切换时通过 `pi.sendMessage` 发送一条**仅模型可见**的通知（"Plan mode is now ON/OFF …"），模型能明确感知模式已切换，不会在用户关闭后仍反复要求其退出计划模式
 - **`plan_mode_question` 工具**：模型遇到无法从代码得到答案、又会实质影响方案的取舍时，通过结构化选择器向你提问（1-3 个问题，每个 2-4 个选项，也可自定义作答）
 - **状态持久化**：切换状态写入会话条目，resume / fork 后自动恢复
-- **页脚状态**：计划模式开启时页脚显示 `⏸ plan`
+- **页脚状态**：计划模式开启时页脚显示 ` ⏸ plan`
 
 ## 安装
 
@@ -58,7 +58,7 @@ ln -sfn /path/to/pi-agent-extensions/plan-mode-lite ~/.pi/agent/extensions/plan-
 
 - `defaultOn`：启动时是否默认进入计划模式（默认 `true`）
 - `toggleShortcut`：切换快捷键（默认 `ctrl+tab`；注意不要设成 `tab`，会遮蔽输入框的 Tab 补全，`shift+tab` 则会遮蔽 thinking 级别循环——扩展快捷键优先于内置按键）
-- `safeSubcommands`：额外放行的子命令（自担风险）。`gh` 的键值格式为 `"pr view"` 这类双段路径，且必须带 `--json` 输出
+- `safeSubcommands`：额外放行的子命令（自担风险）。信任粒度是"单个命令段"：只有以配置前缀开头的段会被放行，`;`、`&&`、管道之后的其余段落仍走只读检查；段首带环境变量赋值（`FOO=1 …`）或含 shell 展开字符的命令不享受该豁免。`gh` 的键值格式为 `"pr view"` 这类双段路径，且必须带 `--json` 输出
 
 旧版 `~/.pi/agent/pi-plan-mode-lite.json`（narumitw 包的配置）在新配置文件不存在时会作为迁移回退被读取。
 

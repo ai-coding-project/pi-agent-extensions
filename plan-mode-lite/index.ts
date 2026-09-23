@@ -65,7 +65,7 @@ export default function planModeExtension(pi: ExtensionAPI) {
 	const shortcutLabel = () => config.toggleShortcut || "/plan";
 
 	const updateUi = (ctx: ExtensionContext) => {
-		ctx.ui.setStatus(FOOTER_STATUS_KEY, state.enabled ? "⏸ plan" : undefined);
+		ctx.ui.setStatus(FOOTER_STATUS_KEY, state.enabled ? " ⏸ plan" : undefined);
 	};
 
 	const restrictTools = (names: string[]) => names.filter((name) => !DISABLED_TOOLS.has(name));

@@ -6,6 +6,15 @@
  * with light adaptation (removed tool-classification helpers; kept bash and
  * PowerShell policies verbatim).
  *
+ * Local deviations from upstream:
+ * - "-i" is only blocked for sed; grep/diff/fd use it as a read-only flag.
+ * - Configured safeSubcommands are trusted per segment (after splitting on
+ *   ";", "&&", "|"), never for the whole chained command.
+ * - Clustered short options (sort -fo, date -su, fd -Hx) are rejected so
+ *   dangerous flags cannot hide inside a bundle.
+ * - Env assignments are only recognized when they lead a segment (FOO=1 cmd),
+ *   not on every argument containing "=" (cat a=b.txt stays allowed).
+ *
  * Design: allowlist-based and fail-closed. Anything the parser cannot
  * understand (backticks, redirects, subshells, unterminated quotes) is
  * rejected. Only segments whose command AND arguments are provably
@@ -133,7 +142,9 @@ export function findBlockedCommandSegment(
 	workingDirectory?: string,
 	platform: NodeJS.Platform = process.platform,
 ): string | undefined {
-	if (matchesConfiguredSafeSubcommand(command, safeSubcommands)) return undefined;
+	// NOTE: configured safeSubcommands are applied per segment inside
+	// isSafeSegment/isSafePowerShellSegment — trusting the raw command here
+	// would let "git status; rm -rf /" bypass every check.
 	const segments = splitShellSegments(command);
 	if (!segments || segments.length === 0) return command.trim() || "(empty command)";
 	return segments.find((segment) => !isSafeSegment(segment, safeSubcommands, workingDirectory, platform));
@@ -153,7 +164,7 @@ export function findBlockedPowerShellCommandSegment(
 	safeSubcommands: SafeSubcommands = {},
 	workingDirectory?: string,
 ): string | undefined {
-	if (matchesConfiguredSafeSubcommand(command, safeSubcommands)) return undefined;
+	// NOTE: per-segment trust, see findBlockedCommandSegment.
 	const segments = splitPowerShellSegments(command);
 	if (!segments || segments.length === 0) return command.trim() || "(empty command)";
 	return segments.find((segment) => !isSafePowerShellSegment(segment, safeSubcommands, workingDirectory));
@@ -233,6 +244,7 @@ function isSafePowerShellSegment(segment: string, safeSubcommands: SafeSubcomman
 	if (!tokens || tokens.length === 0 || tokens.includes("--%")) return false;
 	const command = tokens[0]?.toLowerCase();
 	if (!command) return false;
+	if (matchesConfiguredSafeSubcommand(segment, safeSubcommands)) return true;
 	const args = tokens.slice(1);
 	if (READ_ONLY_POWERSHELL_COMMANDS.has(command)) return true;
 	if (command === "get-process") return isSafeGetProcessArguments(args);
@@ -336,13 +348,17 @@ function isSafeSegment(
 	workingDirectory: string | undefined,
 	platform: NodeJS.Platform,
 ) {
-	if (hasShellExpansion(segment) || /(^|\s)[A-Za-z_][A-Za-z0-9_]*=/.test(segment)) {
+	if (hasShellExpansion(segment) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(segment)) {
 		return false;
 	}
 	const tokens = shellWords(segment);
 	if (!tokens || tokens.length === 0) return false;
 	const command = tokens[0]?.toLowerCase();
 	if (!command || MUTATING_COMMANDS.has(command)) return false;
+	// Configured safeSubcommands are trusted per segment only: separators such
+	// as ";", "&&", "|" are already split off, so a prefix like "git status"
+	// can never vouch for a later "rm -rf /" segment.
+	if (matchesConfiguredSafeSubcommand(segment, safeSubcommands)) return true;
 	const args = tokens.slice(1);
 	if (!hasSafeArguments(command, args)) return false;
 	if (command === "hostname") return args.length === 0;
@@ -409,7 +425,9 @@ function shellWords(segment: string): string[] | undefined {
 }
 
 function hasSafeArguments(command: string, args: string[]) {
-	const forbidden = new Set(["-i", "--in-place", "--fix", "--write", "-delete", "--delete"]);
+	// No "-i" here: only sed treats it as in-place (checked below); for
+	// grep/diff/fd it is a read-only case-insensitive flag.
+	const forbidden = new Set(["--in-place", "--fix", "--write", "-delete", "--delete"]);
 	if (args.some((argument) => forbidden.has(argument))) return false;
 	if (
 		command === "sed" &&
@@ -427,17 +445,14 @@ function hasSafeArguments(command: string, args: string[]) {
 	) {
 		return false;
 	}
-	if (command === "date" && args.some((argument) => argument === "-s" || argument.startsWith("--set"))) {
+	// Clusters count: "-su 20200101" and "-s20200101" both set the date. The
+	// class holds only valueless flags (u/n/R), so "date -Iseconds" stays safe.
+	if (command === "date" && args.some((argument) => argument.startsWith("--set") || /^-[unR]*s/.test(argument))) {
 		return false;
 	}
 	if (
 		(command === "sort" || command === "tree") &&
-		args.some(
-			(argument) =>
-				argument === "-o" ||
-				(argument.startsWith("-o") && !argument.startsWith("--")) ||
-				argument.startsWith("--output"),
-		)
+		args.some((argument) => argument.startsWith("--output") || /^-[a-zA-Z]*o/.test(argument))
 	) {
 		return false;
 	}
@@ -445,8 +460,7 @@ function hasSafeArguments(command: string, args: string[]) {
 		command === "sort" &&
 		args.some(
 			(argument) =>
-				argument === "-T" ||
-				(argument.startsWith("-T") && argument.length > 2) ||
+				/^-[a-zA-Z]*T/.test(argument) ||
 				argument.startsWith("--temporary-directory") ||
 				argument.startsWith("--compress-program"),
 		)
@@ -461,8 +475,10 @@ function hasSafeArguments(command: string, args: string[]) {
 	}
 	if (
 		command === "fd" &&
-		args.some((argument) =>
-			["-x", "-X", "--exec", "--exec-batch"].some((flag) => argument === flag || argument.startsWith(`${flag}=`)),
+		args.some(
+			(argument) =>
+				/^-[a-zA-Z]*[xX]/.test(argument) ||
+				["--exec", "--exec-batch"].some((flag) => argument === flag || argument.startsWith(`${flag}=`)),
 		)
 	) {
 		return false;
