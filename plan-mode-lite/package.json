@@ -1,6 +1,6 @@
 {
 	"name": "plan-mode-lite",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"description": "Lightweight plan mode extension for pi — read-only exploration by default, toggle with ctrl+tab or /plan",
 	"license": "MIT",
 	"type": "module",

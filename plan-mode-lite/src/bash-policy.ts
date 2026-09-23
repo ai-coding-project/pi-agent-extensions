@@ -14,11 +14,15 @@
  *   dangerous flags cannot hide inside a bundle.
  * - Env assignments are only recognized when they lead a segment (FOO=1 cmd),
  *   not on every argument containing "=" (cat a=b.txt stays allowed).
+ * - "N>/dev/null" (e.g. "2>/dev/null") is stripped from the segment and
+ *   allowed; every other redirect shape (bare ">", ">>", ">&", any target
+ *   other than /dev/null, and all input redirects) stays blocked.
  *
  * Design: allowlist-based and fail-closed. Anything the parser cannot
- * understand (backticks, redirects, subshells, unterminated quotes) is
- * rejected. Only segments whose command AND arguments are provably
- * read-only are allowed.
+ * understand (backticks, subshells, unterminated quotes) is rejected, and
+ * redirects are blocked except the provably inert "N>/dev/null" discard.
+ * Only segments whose command AND arguments are provably read-only are
+ * allowed.
  */
 
 import { isAbsolute, normalize } from "node:path";
@@ -295,11 +299,54 @@ function powerShellWords(segment: string): string[] | undefined {
 	return words;
 }
 
+/**
+ * Matches a provably inert null redirect — "N>/dev/null" (optionally with a
+ * space before the target, e.g. "2> /dev/null"). `index` points at the ">";
+ * `segmentStart` is where the current segment begins. Returns the [start, end)
+ * span covering the fd digits through "/dev/null" so the caller can strip it
+ * from the segment text, or undefined for any other redirect shape (fail
+ * closed: ">f", ">>", ">&", "2>/dev/nullx", "foo2>/dev/null", ...).
+ */
+function matchNullRedirectSpan(
+	command: string,
+	index: number,
+	segmentStart: number,
+): [number, number] | undefined {
+	let digitStart = index;
+	while (digitStart > segmentStart && /[0-9]/.test(command[digitStart - 1] ?? "")) digitStart -= 1;
+	if (digitStart === index) return undefined; // an fd number is required; bare ">" stays blocked
+	if (digitStart > segmentStart && !/\s/.test(command[digitStart - 1] ?? "")) return undefined;
+	// digits glued to a word ("foo2>") are not an fd redirect
+	if (command[index + 1] === ">" || command[index + 1] === "&") return undefined; // ">>" and ">&" stay blocked
+	let cursor = index + 1;
+	while (cursor < command.length && /\s/.test(command[cursor] ?? "")) cursor += 1;
+	if (!command.startsWith("/dev/null", cursor)) return undefined;
+	const end = cursor + "/dev/null".length;
+	const boundary = command[end];
+	if (boundary !== undefined && ![" ", "\t", ";", "|", "&"].includes(boundary)) return undefined;
+	return [digitStart, end];
+}
+
+/** Joins [from, to) with the recorded cut spans (absolute positions) removed. */
+function sliceWithCuts(text: string, from: number, to: number, cuts: ReadonlyArray<[number, number]>): string {
+	let result = "";
+	let cursor = from;
+	for (const [cutStart, cutEnd] of cuts) {
+		if (cutStart >= to) break;
+		if (cutEnd <= cursor) continue;
+		result += text.slice(cursor, Math.max(cursor, cutStart));
+		cursor = Math.max(cursor, cutEnd);
+	}
+	result += text.slice(cursor, to);
+	return result;
+}
+
 function splitShellSegments(command: string): string[] | undefined {
 	const trimmed = command.trim();
 	if (!trimmed || /[\n\r`]/.test(trimmed)) return undefined;
 
 	const segments: string[] = [];
+	let cuts: Array<[number, number]> = [];
 	let quote: "'" | '"' | undefined;
 	let escaped = false;
 	let start = 0;
@@ -321,22 +368,33 @@ function splitShellSegments(command: string): string[] | undefined {
 			quote = character;
 			continue;
 		}
-		if (character === ">" || character === "<" || character === "(" || character === ")") {
+		if (character === "<" || character === "(" || character === ")") {
 			return undefined;
+		}
+		if (character === ">") {
+			// The only redirect allowed through: an fd discard to /dev/null. It is
+			// stripped from the segment so downstream tokenization sees plain
+			// command words; every other redirect shape fails closed.
+			const span = matchNullRedirectSpan(trimmed, index, start);
+			if (!span) return undefined;
+			cuts.push(span);
+			index = span[1] - 1; // resume scanning after "/dev/null"; the loop adds 1
+			continue;
 		}
 		const next = trimmed[index + 1];
 		if (character === "&" && next !== "&") return undefined;
 		const separatorLength =
 			character === ";" || character === "|" ? (next === character ? 2 : 1) : character === "&" && next === "&" ? 2 : 0;
 		if (separatorLength === 0) continue;
-		const segment = trimmed.slice(start, index).trim();
+		const segment = sliceWithCuts(trimmed, start, index, cuts).trim();
 		if (!segment) return undefined;
 		segments.push(segment);
+		cuts = [];
 		index += separatorLength - 1;
 		start = index + 1;
 	}
 	if (quote || escaped) return undefined;
-	const finalSegment = trimmed.slice(start).trim();
+	const finalSegment = sliceWithCuts(trimmed, start, trimmed.length, cuts).trim();
 	if (!finalSegment) return undefined;
 	segments.push(finalSegment);
 	return segments;

@@ -234,6 +234,40 @@ test("read-only -i flags and equals-sign arguments are safe (no false positives)
 	}
 });
 
+test("N>/dev/null redirects are stripped and allowed", () => {
+	for (const cmd of [
+		"ls missing-dir 2>/dev/null",
+		"rg -c '' f.txt 2>/dev/null",
+		"ls foo 1>/dev/null",
+		"ls foo 2> /dev/null", // space before the target
+		"ls a 2>/dev/null && ls b",
+		"ls a; ls b 2>/dev/null",
+		"uniq f 2>/dev/null", // stripped: not counted as a positional arg
+		"git remote get-url origin 2>/dev/null",
+		"find . -name x 2>/dev/null",
+		"ls 2>/dev/null 2>/dev/null", // repeated discards
+		'echo "2>/dev/null"', // quoted text is an argument, not a redirect
+	]) {
+		assert.ok(safe(cmd), `should be safe: ${cmd}`);
+	}
+});
+
+test("every other redirect shape stays blocked (fail closed)", () => {
+	for (const cmd of [
+		"ls > out.txt",
+		"ls out 2>/tmp/evil", // target is not /dev/null
+		"ls out 2>/dev/nullx", // /dev/null as a prefix of a longer path
+		"ls out 2>>/dev/null", // append form
+		"ls out 2>&1", // fd duplication
+		"ls out >/dev/null", // bare ">" without an fd number
+		"echo foo2>/dev/null", // digits glued to a word are not an fd redirect
+		"ls out 2>/dev/null > /tmp/evil", // a second unsafe redirect
+		"cat foo 2>/dev/null && rm bar", // one discard cannot vouch for the rest
+	]) {
+		assert.ok(!safe(cmd), `should be blocked: ${cmd}`);
+	}
+});
+
 test("PowerShell read-only allowlist", () => {
 	for (const cmd of [
 		"Get-ChildItem -Recurse",
