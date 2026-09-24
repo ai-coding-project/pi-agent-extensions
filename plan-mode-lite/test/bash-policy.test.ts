@@ -268,6 +268,71 @@ test("every other redirect shape stays blocked (fail closed)", () => {
 	}
 });
 
+test("unquoted newlines are bash segment separators; quoted newlines are inert text", () => {
+	// 引号内的换行只是字符串内容
+	assert.ok(safe(`echo "===
+ keychain/签名相关 ==="`));
+	// 引号外换行等价于 ";",逐段校验
+	assert.ok(safe(`ls /tmp
+cat foo.txt`));
+	// 恶意段照样被拦
+	assert.ok(!safe(`echo "hello"
+rm -rf /tmp/pwned`));
+	// 引号内的 "rm" 只是 echo 的输出文本
+	assert.ok(safe(`echo "hi
+rm -rf x"`));
+	// "\\" + 换行是续行
+	assert.ok(safe(`cat foo\
+bar`));
+	// 2>/dev/null 后跟换行(段分隔符)仍然放行
+	assert.ok(safe(`ls foo 2>/dev/null
+ls bar`));
+	// 空段仍 fail-closed
+	assert.ok(!safe(`ls a
+
+ls b`));
+	// "\\r" 仍然整条拒绝
+	assert.ok(!safe(`ls a\r\nls b`));
+});
+
+test("the motivating command: multi-line echo banner + glob + 2>/dev/null chain", () => {
+	const cmd = `ls /Users/kin/Documents/10source/zeromusic/.vscode; cat /Users/kin/Documents/10source/zeromusic/.vscode/*.json 2>/dev/null | head -60; echo "===
+ keychain/签名相关 ==="; grep -rn "DEVELOPMENT_TEAM\\|CODE_SIGN" /Users/kin/Documents/10source/zeromusic/ios/Runner.xcodeproj/project.pbxproj | sort -u | head; grep -rn "DEVELOPMENT_TEAM\\|CODE_SIGN" /Users/kin/Documents/10source/zeromusic/macos/Runner.xcodeproj/project.pbxproj | sort -u | head`;
+	assert.ok(safe(cmd));
+});
+
+test("unquoted globs are allowed for read-only commands", () => {
+	for (const cmd of [
+		"cat /path/.vscode/*.json 2>/dev/null | head -60",
+		"ls *.ts",
+		"grep -rn 'pattern' *.md",
+		"head -60 *.log",
+		"wc -l *.txt",
+		"echo *",
+		"find . -name '*.json'",
+	]) {
+		assert.ok(safe(cmd), `should be safe: ${cmd}`);
+	}
+});
+
+test("globs do not bypass mutating / allowlist / substitution checks", () => {
+	for (const cmd of [
+		"rm *",
+		"mv *.txt /tmp",
+		"find *.json -delete",
+		"sh *",
+		"*.sh",
+		"echo ${HOME}",
+		"cat {a,b}.txt",
+	]) {
+		assert.ok(!safe(cmd), `should be blocked: ${cmd}`);
+	}
+	// 已接受的残余风险:展开结果可能注入选项形状的文件名
+	// (如名为 --compress-program=x 的文件配合 "sort *"),用户已确认接受
+	assert.ok(safe("sort *"));
+	assert.ok(safe("git diff *"));
+});
+
 test("PowerShell read-only allowlist", () => {
 	for (const cmd of [
 		"Get-ChildItem -Recurse",

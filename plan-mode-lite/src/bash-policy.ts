@@ -17,12 +17,22 @@
  * - "N>/dev/null" (e.g. "2>/dev/null") is stripped from the segment and
  *   allowed; every other redirect shape (bare ">", ">>", ">&", any target
  *   other than /dev/null, and all input redirects) stays blocked.
+ * - Newlines follow bash semantics: an unquoted newline separates segments
+ *   (like ";"), a newline inside quotes is inert text, and "\\" + newline
+ *   is a line continuation. "\r" and backticks still fail closed. Blank
+ *   segments (e.g. from ";;" or blank lines) stay rejected.
+ * - Unquoted globs ("*", "?", "[") are allowed: shell expansion only ever
+ *   turns them into file-path arguments for already-allowlisted read-only
+ *   commands. Accepted residual risk: adversarial filenames can smuggle
+ *   option-shaped arguments (e.g. a file named "--compress-program=x"
+ *   combined with "sort *"). "$" (command/parameter substitution) and "{"
+ *   (brace expansion) stay rejected.
  *
  * Design: allowlist-based and fail-closed. Anything the parser cannot
- * understand (backticks, subshells, unterminated quotes) is rejected, and
- * redirects are blocked except the provably inert "N>/dev/null" discard.
- * Only segments whose command AND arguments are provably read-only are
- * allowed.
+ * understand (backticks, subshells, unterminated quotes, stray "\r") is
+ * rejected, and redirects are blocked except the provably inert
+ * "N>/dev/null" discard. Only segments whose command AND arguments are
+ * provably read-only are allowed.
  */
 
 import { isAbsolute, normalize } from "node:path";
@@ -306,6 +316,9 @@ function powerShellWords(segment: string): string[] | undefined {
  * span covering the fd digits through "/dev/null" so the caller can strip it
  * from the segment text, or undefined for any other redirect shape (fail
  * closed: ">f", ">>", ">&", "2>/dev/nullx", "foo2>/dev/null", ...).
+ * Spans never cross a newline: whitespace around the fd and before the
+ * target is space/tab only, while a newline may follow the target as a
+ * segment separator.
  */
 function matchNullRedirectSpan(
 	command: string,
@@ -315,15 +328,15 @@ function matchNullRedirectSpan(
 	let digitStart = index;
 	while (digitStart > segmentStart && /[0-9]/.test(command[digitStart - 1] ?? "")) digitStart -= 1;
 	if (digitStart === index) return undefined; // an fd number is required; bare ">" stays blocked
-	if (digitStart > segmentStart && !/\s/.test(command[digitStart - 1] ?? "")) return undefined;
+	if (digitStart > segmentStart && !/[ \t]/.test(command[digitStart - 1] ?? "")) return undefined;
 	// digits glued to a word ("foo2>") are not an fd redirect
 	if (command[index + 1] === ">" || command[index + 1] === "&") return undefined; // ">>" and ">&" stay blocked
 	let cursor = index + 1;
-	while (cursor < command.length && /\s/.test(command[cursor] ?? "")) cursor += 1;
+	while (cursor < command.length && /[ \t]/.test(command[cursor] ?? "")) cursor += 1;
 	if (!command.startsWith("/dev/null", cursor)) return undefined;
 	const end = cursor + "/dev/null".length;
 	const boundary = command[end];
-	if (boundary !== undefined && ![" ", "\t", ";", "|", "&"].includes(boundary)) return undefined;
+	if (boundary !== undefined && ![" ", "\t", ";", "|", "&", "\n"].includes(boundary)) return undefined;
 	return [digitStart, end];
 }
 
@@ -342,8 +355,11 @@ function sliceWithCuts(text: string, from: number, to: number, cuts: ReadonlyArr
 }
 
 function splitShellSegments(command: string): string[] | undefined {
+	// "\r" and backticks fail closed; "\n" is handled below as a bash command
+	// separator (quoted newlines and "\\"-continuations pass through the
+	// quote/escape branches first).
 	const trimmed = command.trim();
-	if (!trimmed || /[\n\r`]/.test(trimmed)) return undefined;
+	if (!trimmed || /[\r`]/.test(trimmed)) return undefined;
 
 	const segments: string[] = [];
 	let cuts: Array<[number, number]> = [];
@@ -379,6 +395,16 @@ function splitShellSegments(command: string): string[] | undefined {
 			if (!span) return undefined;
 			cuts.push(span);
 			index = span[1] - 1; // resume scanning after "/dev/null"; the loop adds 1
+			continue;
+		}
+		if (character === "\n") {
+			// Unquoted newline: a command separator with bash semantics, treated
+			// exactly like ";" (an empty segment still fails closed).
+			const segment = sliceWithCuts(trimmed, start, index, cuts).trim();
+			if (!segment) return undefined;
+			segments.push(segment);
+			cuts = [];
+			start = index + 1;
 			continue;
 		}
 		const next = trimmed[index + 1];
@@ -425,6 +451,12 @@ function isSafeSegment(
 	return isSafeStructuredCommand(command, args, safeSubcommands, workingDirectory);
 }
 
+/**
+ * Returns true for expansion the policy refuses to reason about: command
+ * and parameter substitution ("$", also inside double quotes) and brace
+ * expansion ("{"). Unquoted globs ("*", "?", "[") are deliberately not
+ * treated as expansion — see the header notes.
+ */
 function hasShellExpansion(segment: string) {
 	let quote: "'" | '"' | undefined;
 	let escaped = false;
@@ -446,7 +478,7 @@ function hasShellExpansion(segment: string) {
 			quote = character;
 			continue;
 		}
-		if (["$", "*", "?", "[", "{"].includes(character)) return true;
+		if (["$", "{"].includes(character)) return true;
 	}
 	return false;
 }
